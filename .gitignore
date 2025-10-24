@@ -1,0 +1,6 @@
+/out
+/tmp
+
+/sqlc.exe
+/frontend/*
+!frontend/website.go

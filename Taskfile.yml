@@ -1,0 +1,23 @@
+# https://taskfile.dev
+
+version: '3'
+
+vars:
+  GREETING: Hello, World!
+
+tasks:
+  default:
+    cmds:
+      - echo "{{.GREETING}}"
+    silent: true
+  build:
+    cmds:
+      - go build -o out/secret_injector.exe main.go 
+  run:
+    cmds:
+      - go run main.go serve
+  export:
+    cmds:
+      - powershell -Command "Copy-Item -Path 'D:\Ashim\Projects\Go\secret_injector\out\secret_injector.exe' -Destination 'D:\Ashim\Programs\Secret Injector\secret_injector.exe' -Force"
+
+
