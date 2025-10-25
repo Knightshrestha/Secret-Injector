@@ -34,5 +34,8 @@
 		"typescript": "^5.9.3",
 		"typescript-eslint": "^8.46.2",
 		"vite": "^7.1.12"
-	}
+	},
+	"overrides": {
+    "cookie": "^0.7.0"
+  }
 }
