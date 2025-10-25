@@ -43,86 +43,153 @@ func getDBPath() (string, error) {
 	return dbPath, nil
 }
 
-func OpenDatabase() CustomDB {
+type DB_Struct struct {
+	db      *sql.DB
+	queries *generated.Queries
+}
+
+// OpenWriteDatabase opens a single write connection with WAL mode
+func OpenWriteDatabase() (DB_Struct, error) {
 	dbPath, err := getDBPath()
 	if err != nil {
-		log.Fatal("Cannot get database path:", err)
+		return DB_Struct{}, fmt.Errorf("cannot get database path: %w", err)
 	}
 
 	// Write connection DSN
 	pragmasWrite := "?_busy_timeout=5000&_synchronous=NORMAL&cache_size=-2000&_txlock=immediate&_timeout=5000&_foreign_keys=1"
 
-	// Read connection DSN
-	pragmasRead := "?mode=ro&_query_only=1&cache_size=-2000&_busy_timeout=5000&_foreign_keys=1"
-
 	// Write connection (1 connection max)
 	dbWrite, err := sql.Open("sqlite", dbPath+pragmasWrite)
 	if err != nil {
-		log.Fatal("Cannot open write database:", err)
+		return DB_Struct{}, fmt.Errorf("cannot open write database: %w", err)
 	}
+
 	dbWrite.SetMaxOpenConns(1)
 	dbWrite.SetMaxIdleConns(1)
 	dbWrite.SetConnMaxLifetime(time.Hour)
 
+	// Enable WAL mode
 	if _, err := dbWrite.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		log.Fatal("Failed to enable WAL mode:", err)
+		dbWrite.Close()
+		return DB_Struct{}, fmt.Errorf("failed to enable WAL mode: %w", err)
 	}
 
 	// Verify WAL mode is enabled
 	var mode string
 	if err := dbWrite.QueryRow("PRAGMA journal_mode").Scan(&mode); err != nil {
-		log.Fatal("Failed to check WAL mode:", err)
+		dbWrite.Close()
+		return DB_Struct{}, fmt.Errorf("failed to check WAL mode: %w", err)
 	}
 	if mode != "wal" {
-		log.Fatal("WAL mode not enabled, got:", mode)
+		dbWrite.Close()
+		return DB_Struct{}, fmt.Errorf("WAL mode not enabled, got: %s", mode)
 	}
 	fmt.Println("✓ WAL mode enabled:", mode)
 
 	// Create tables ONLY on write connection
 	ctx := context.Background()
 	if _, err := dbWrite.ExecContext(ctx, ddl); err != nil {
-		log.Fatal("Failed to create tables:", err)
+		dbWrite.Close()
+		return DB_Struct{}, fmt.Errorf("failed to create tables: %w", err)
 	}
 
-	// Read connection (25-50 connections for production), Open AFTER creating tables
+	return DB_Struct{
+		db:      dbWrite,
+		queries: generated.New(dbWrite),
+	}, nil
+}
+
+// OpenReadDatabase opens multiple read-only connections
+func OpenReadDatabase() (DB_Struct, error) {
+	dbPath, err := getDBPath()
+	if err != nil {
+		return DB_Struct{}, fmt.Errorf("cannot get database path: %w", err)
+	}
+
+	// Read connection DSN
+	pragmasRead := "?mode=ro&_query_only=1&cache_size=-2000&_busy_timeout=5000&_foreign_keys=1"
+
+	// Read connection (25-50 connections for production)
 	dbRead, err := sql.Open("sqlite", dbPath+pragmasRead)
 	if err != nil {
-		dbWrite.Close()
-		log.Fatal("Cannot open read database:", err)
+		return DB_Struct{}, fmt.Errorf("cannot open read database: %w", err)
 	}
 
 	dbRead.SetMaxOpenConns(25)
 	dbRead.SetMaxIdleConns(10)
-
 	dbRead.SetConnMaxLifetime(time.Hour)
 
-	readQueries := generated.New(dbRead)
-	writeQueries := generated.New(dbWrite)
+	return DB_Struct{
+		db:      dbRead,
+		queries: generated.New(dbRead),
+	}, nil
+}
+
+// OpenDatabase opens both read and write database connections
+func OpenDatabase() CustomDB {
+	// Open write database first (creates tables)
+	writableDatabase, err := OpenWriteDatabase()
+	if err != nil {
+		log.Fatal("Failed to open write database:", err)
+	}
+
+	// Open read database after tables are created
+	readOnlyDatabase, err := OpenReadDatabase()
+	if err != nil {
+		writableDatabase.db.Close()
+		log.Fatal("Failed to open read database:", err)
+	}
 
 	return CustomDB{
-		ReadDB:       dbRead,
-		WriteDB:      dbWrite,
-		ReadQueries:  readQueries,
-		WriteQueries: writeQueries,
+		ReadDB:       readOnlyDatabase.db,
+		WriteDB:      writableDatabase.db,
+		ReadQueries:  readOnlyDatabase.queries,
+		WriteQueries: writableDatabase.queries,
 	}
 }
 
-// CloseDatabase properly closes both database connections and checkpoints WAL
-func CloseDatabase(db CustomDB) error {
-	if _, err := db.WriteDB.Exec(`PRAGMA wal_checkpoint(TRUNCATE);`); err != nil {
+func CloseWriteDatabase(dbWrite *sql.DB) error {
+	if dbWrite == nil {
+		return nil
+	}
+
+	// Checkpoint WAL before closing
+	if _, err := dbWrite.Exec(`PRAGMA wal_checkpoint(TRUNCATE);`); err != nil {
 		log.Println("Warning: Failed to checkpoint WAL:", err)
 	}
 
-	// Close read connection first
-	if err := db.ReadDB.Close(); err != nil {
-		log.Println("Warning: Failed to close read database:", err)
-	}
-
 	// Close write connection
-	if err := db.WriteDB.Close(); err != nil {
+	if err := dbWrite.Close(); err != nil {
 		return fmt.Errorf("failed to close write database: %w", err)
 	}
 
-	log.Println("Database connections closed successfully.")
+	log.Println("Write database connection closed successfully.")
+	return nil
+}
+
+func CloseReadDatabase(dbRead *sql.DB) error {
+	if dbRead == nil {
+		return nil
+	}
+
+	if err := dbRead.Close(); err != nil {
+		return fmt.Errorf("failed to close read database: %w", err)
+	}
+
+	log.Println("Read database connection closed successfully.")
+	return nil
+}
+
+func CloseDatabase(db CustomDB) error {
+	// Close read connection first
+	if err := CloseReadDatabase(db.ReadDB); err != nil {
+		log.Println("Warning:", err)
+	}
+
+	// Close write connection (with WAL checkpoint)
+	if err := CloseWriteDatabase(db.WriteDB); err != nil {
+		return err
+	}
+
 	return nil
 }
