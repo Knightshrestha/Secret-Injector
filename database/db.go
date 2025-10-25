@@ -176,7 +176,6 @@ func CloseReadDatabase(dbRead *sql.DB) error {
 		return fmt.Errorf("failed to close read database: %w", err)
 	}
 
-	log.Println("Read database connection closed successfully.")
 	return nil
 }
 

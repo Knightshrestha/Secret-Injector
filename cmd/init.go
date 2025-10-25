@@ -41,6 +41,27 @@ var initCmd = &cobra.Command{
 		for _, project := range selectedProjects {
 			fmt.Printf("  • %s (ID: %s)\n", project.Name, project.ID)
 		}
+
+		var projectIDs []string
+		for _, project := range selectedProjects {
+			projectIDs = append(projectIDs, project.ID)
+		}
+
+		allSecrets, err := core.FetchSecrets(projectIDs)
+		if err != nil {
+			log.Fatalf("Something went wrong, fetching secrets: %s", err)
+		}
+		
+		if len(allSecrets) == 0 {
+			fmt.Println("No secrets to display")
+			return
+		}
+
+		fmt.Println("\n✓ Selected Secrets:")
+		for _, secret := range allSecrets {
+			fmt.Printf("  • %s: %s (ID: %s)\n", secret.Key, secret.Value, secret.ID)
+		}
+
 	},
 }
 
