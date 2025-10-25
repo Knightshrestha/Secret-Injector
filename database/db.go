@@ -44,8 +44,8 @@ func getDBPath() (string, error) {
 }
 
 type DB_Struct struct {
-	db      *sql.DB
-	queries *generated.Queries
+	DB      *sql.DB
+	Queries *generated.Queries
 }
 
 // OpenWriteDatabase opens a single write connection with WAL mode
@@ -94,8 +94,8 @@ func OpenWriteDatabase() (DB_Struct, error) {
 	}
 
 	return DB_Struct{
-		db:      dbWrite,
-		queries: generated.New(dbWrite),
+		DB:      dbWrite,
+		Queries: generated.New(dbWrite),
 	}, nil
 }
 
@@ -120,8 +120,8 @@ func OpenReadDatabase() (DB_Struct, error) {
 	dbRead.SetConnMaxLifetime(time.Hour)
 
 	return DB_Struct{
-		db:      dbRead,
-		queries: generated.New(dbRead),
+		DB:      dbRead,
+		Queries: generated.New(dbRead),
 	}, nil
 }
 
@@ -136,15 +136,15 @@ func OpenDatabase() CustomDB {
 	// Open read database after tables are created
 	readOnlyDatabase, err := OpenReadDatabase()
 	if err != nil {
-		writableDatabase.db.Close()
+		writableDatabase.DB.Close()
 		log.Fatal("Failed to open read database:", err)
 	}
 
 	return CustomDB{
-		ReadDB:       readOnlyDatabase.db,
-		WriteDB:      writableDatabase.db,
-		ReadQueries:  readOnlyDatabase.queries,
-		WriteQueries: writableDatabase.queries,
+		ReadDB:       readOnlyDatabase.DB,
+		WriteDB:      writableDatabase.DB,
+		ReadQueries:  readOnlyDatabase.Queries,
+		WriteQueries: writableDatabase.Queries,
 	}
 }
 
