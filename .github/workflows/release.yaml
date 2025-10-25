@@ -30,11 +30,14 @@ jobs:
       - name: Build SvelteKit frontend
         run: |
           cd frontend
-          npm install
+          npm ci
           npm run build
           cd ..
         env:
           PUBLIC_BASE_URL: ""
+      
+      - name: Reset git state
+        run: git checkout .
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
