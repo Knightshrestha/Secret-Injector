@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/Knightshrestha/Secret-Injector/core"
@@ -17,7 +18,10 @@ var initCmd = &cobra.Command{
 	Long:  `Fetch available projects and allow user to select one or multiple projects.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Fetch projects
-		projects := core.FetchProjects()
+		projects, err := core.FetchProjects()
+		if err != nil {
+			log.Fatalf("Something went wrong, fetching projects: %s", err)
+		}
 
 		if len(projects) == 0 {
 			fmt.Println("No projects available")
