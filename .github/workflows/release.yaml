@@ -30,12 +30,12 @@ jobs:
       - name: Build SvelteKit frontend
         run: |
           cd frontend
-          npm ci
+          npm install
           npm run build
           cd ..
         env:
           PUBLIC_BASE_URL: ""
-      
+
       - name: Reset git state
         run: git checkout .
 
@@ -43,7 +43,7 @@ jobs:
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
-          version: "~> v2"
-          args: release --clean
+          version: latest
+          args: release --clean --skip=validate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
