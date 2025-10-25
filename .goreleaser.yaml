@@ -35,8 +35,11 @@ release:
   draft: true
   
 changelog:
+  use: github
+  format: "{{.SHA}}: {{.Message}} (@{{.AuthorUsername}})"
   sort: asc
   filters:
     exclude:
       - '^docs:'
       - '^test:'
+      - '^frontend:'
