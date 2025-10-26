@@ -15,13 +15,8 @@ import (
 // updateCmd represents the update command
 var updateCmd = &cobra.Command{
 	Use:   "update",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "Fetch update from github",
+	Long: `This command will fetch the latest release from github, check if new version is available and if so, download and update the app version. The old file is appended with ".old" so that we can go back in case something has gone wrong.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		updateStruct := &updater.Updater{
 			Owner:      config.Owner, // Replace with your GitHub username
