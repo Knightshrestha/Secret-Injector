@@ -2,7 +2,5 @@
 /tmp
 
 /sqlc.exe
-/frontend/*
-!frontend/website.go
 # Added by goreleaser init:
 dist/

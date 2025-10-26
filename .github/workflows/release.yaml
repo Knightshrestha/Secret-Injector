@@ -22,22 +22,22 @@ jobs:
         with:
           go-version: "1.25.3"
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22.21.0"
+      # - name: Set up Node.js
+      #   uses: actions/setup-node@v4
+      #   with:
+      #     node-version: "22.21.0"
 
-      - name: Build SvelteKit frontend
-        run: |
-          cd frontend
-          npm install
-          npm run build
-          cd ..
-        env:
-          PUBLIC_BASE_URL: ""
+      # - name: Build SvelteKit frontend
+      #   run: |
+      #     cd frontend
+      #     npm install
+      #     npm run build
+      #     cd ..
+      #   env:
+      #     PUBLIC_BASE_URL: ""
 
-      - name: Reset git state
-        run: git checkout .
+      # - name: Reset git state
+      #   run: git checkout .
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
