@@ -5,7 +5,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/Knightshrestha/Secret-Injector/core"
+	"github.com/Knightshrestha/Secret-Injector/core/db_ro"
 	"github.com/Knightshrestha/Secret-Injector/database/generated"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -18,7 +18,7 @@ var initCmd = &cobra.Command{
 	Long:  `Fetch available projects and allow user to select one or multiple projects.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Fetch projects
-		projects, err := core.FetchProjects()
+		projects, err := db_ro.FetchProjects()
 		if err != nil {
 			log.Fatalf("Something went wrong, fetching projects: %s", err)
 		}
@@ -47,7 +47,7 @@ var initCmd = &cobra.Command{
 			projectIDs = append(projectIDs, project.ID)
 		}
 
-		allSecrets, err := core.FetchSecrets(projectIDs)
+		allSecrets, err := db_ro.FetchSecrets(projectIDs)
 		if err != nil {
 			log.Fatalf("Something went wrong, fetching secrets: %s", err)
 		}

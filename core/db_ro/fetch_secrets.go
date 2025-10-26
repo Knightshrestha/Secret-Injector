@@ -1,4 +1,4 @@
-package core
+package db_ro
 
 import (
 	"context"
