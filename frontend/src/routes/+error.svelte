@@ -55,7 +55,7 @@
 			<!-- Action Buttons -->
 			<div class="flex flex-col sm:flex-row gap-3 justify-center">
 				<a
-					href="/"
+					href="/ui"
 					class="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
 				>
 					Go Home
