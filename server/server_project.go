@@ -7,6 +7,7 @@ import (
 
 	"github.com/Knightshrestha/Secret-Injector/database/generated"
 	"github.com/Knightshrestha/Secret-Injector/server/server_sse"
+	"github.com/Knightshrestha/Secret-Injector/utils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
@@ -76,7 +77,7 @@ func RegisterWriteProjectRoute(
 
 		newProject := generated.CreateProjectParams{
 			ID:          id,
-			Name:        body.Name,
+			Name:        utils.ToScreamingSnakeCase(body.Name),
 			Description: body.Description,
 		}
 
@@ -142,7 +143,7 @@ func RegisterWriteProjectRoute(
 
 		updatedProject := generated.UpdateProjectParams{
 			ID:          id,
-			Name:        body.Name,
+			Name:        utils.ToScreamingSnakeCasePtr(body.Name),
 			Description: body.Description,
 		}
 

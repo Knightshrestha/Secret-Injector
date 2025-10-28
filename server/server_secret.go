@@ -7,6 +7,7 @@ import (
 
 	"github.com/Knightshrestha/Secret-Injector/database/generated"
 	"github.com/Knightshrestha/Secret-Injector/server/server_sse"
+	"github.com/Knightshrestha/Secret-Injector/utils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
@@ -126,7 +127,7 @@ func RegisterWriteSecretRoute(router fiber.Router, readWriteDatabase *generated.
 		newSecret := generated.CreateSecretParams{
 			ID:          id,
 			ProjectID:   body.ProjectID,
-			Key:         body.Key,
+			Key:         utils.ToScreamingSnakeCase(body.Key),
 			Value:       body.Value,
 			Description: body.Description,
 		}
@@ -204,7 +205,7 @@ func RegisterWriteSecretRoute(router fiber.Router, readWriteDatabase *generated.
 
 		updatedSecret := generated.UpdateSecretParams{
 			ID:     id,
-			Key:   body.Key,
+			Key:   utils.ToScreamingSnakeCasePtr(body.Key),
 			Value: body.Value,
 			Description: body.Description,
 		}
