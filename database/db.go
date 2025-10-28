@@ -67,7 +67,6 @@ func SetupDatabase() error {
 		return fmt.Errorf("failed to create tables: %w", err)
 	}
 
-	fmt.Println("✓ Database schema initialized")
 	return nil
 }
 
