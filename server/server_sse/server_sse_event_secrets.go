@@ -15,9 +15,9 @@ import (
 
 // SecretChange represents a secret change event with full data
 type SecretChange struct {
-	Type      EventType             `json:"type"` // "create", "update", "delete", "ping"
-	Timestamp time.Time          `json:"timestamp"`
-	Data      generated.SecretList `json:"data"` // Full secret object
+	Type      EventType            `json:"type"`
+	Timestamp time.Time            `json:"timestamp"`
+	Data      generated.SecretList `json:"data"`
 }
 
 // SecretClient represents an SSE client for secrets
@@ -27,7 +27,7 @@ type SecretClient struct {
 	Context  context.Context
 	Cancel   context.CancelFunc
 	LastPing time.Time
-	mu       sync.Mutex // Protect LastPing
+	mu       sync.Mutex
 }
 
 // SecretHub manages all secret SSE clients
@@ -36,28 +36,30 @@ type SecretHub struct {
 	register   chan *SecretClient
 	unregister chan *SecretClient
 	broadcast  chan SecretChange
-	mu         sync.RWMutex // Protect clients map
+	shutdown   chan struct{}
+	mu         sync.RWMutex
+	running    bool
 }
 
-var SSE_SecretHub = &SecretHub{
-	clients:    make(map[string]*SecretClient),
-	register:   make(chan *SecretClient),
-	unregister: make(chan *SecretClient),
-	broadcast:  make(chan SecretChange, 100),
-}
-
-
-// BroadcastSecretChange sends a secret change with full data to all clients
-func BroadcastSecretChange(changeType EventType, secretData generated.SecretList) {
-	SSE_SecretHub.broadcast <- SecretChange{
-		Type:      changeType,
-		Timestamp: time.Now(),
-		Data:      secretData,
+func NewSecretHub() *SecretHub {
+	return &SecretHub{
+		clients:    make(map[string]*SecretClient),
+		register:   make(chan *SecretClient),
+		unregister: make(chan *SecretClient),
+		broadcast:  make(chan SecretChange, 100),
+		shutdown:   make(chan struct{}),
+		running:    false,
 	}
 }
 
+var SSE_SecretHub = NewSecretHub()
+
 // Run starts the secret hub with cleanup
 func (h *SecretHub) Run() {
+	h.mu.Lock()
+	h.running = true
+	h.mu.Unlock()
+
 	ticker := time.NewTicker(SSEPingInterval)
 	defer ticker.Stop()
 
@@ -65,6 +67,12 @@ func (h *SecretHub) Run() {
 		select {
 		case client := <-h.register:
 			h.mu.Lock()
+			if !h.running {
+				close(client.Chan)
+				client.Cancel()
+				h.mu.Unlock()
+				continue
+			}
 			h.clients[client.ID] = client
 			client.mu.Lock()
 			client.LastPing = time.Now()
@@ -95,6 +103,10 @@ func (h *SecretHub) Run() {
 
 		case <-ticker.C:
 			h.mu.Lock()
+			if !h.running {
+				h.mu.Unlock()
+				continue
+			}
 			now := time.Now()
 			for id, client := range h.clients {
 				client.mu.Lock()
@@ -109,15 +121,12 @@ func (h *SecretHub) Run() {
 					continue
 				}
 
-				// Send ping
 				select {
 				case client.Chan <- SecretChange{
 					Type:      EventPing,
 					Timestamp: now,
 				}:
-					// Ping sent successfully
 				default:
-					// Client channel full, probably dead
 					log.Printf("Secret client %s channel full, removing", id)
 					delete(h.clients, id)
 					close(client.Chan)
@@ -125,12 +134,67 @@ func (h *SecretHub) Run() {
 				}
 			}
 			h.mu.Unlock()
+
+		case <-h.shutdown:
+			h.mu.Lock()
+			log.Println("Secret hub shutting down...")
+			for id, client := range h.clients {
+				close(client.Chan)
+				client.Cancel()
+				delete(h.clients, id)
+			}
+			h.running = false
+			h.mu.Unlock()
+			log.Println("Secret hub stopped")
+			return
 		}
+	}
+}
+
+// Close gracefully shuts down the hub
+func (h *SecretHub) Close() {
+	h.mu.RLock()
+	isRunning := h.running
+	h.mu.RUnlock()
+
+	if isRunning {
+		close(h.shutdown)
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// BroadcastSecretChange sends a secret change to all clients
+func BroadcastSecretChange(changeType EventType, secretData generated.SecretList) {
+	SSE_SecretHub.mu.RLock()
+	isRunning := SSE_SecretHub.running
+	SSE_SecretHub.mu.RUnlock()
+
+	if !isRunning {
+		return
+	}
+
+	select {
+	case SSE_SecretHub.broadcast <- SecretChange{
+		Type:      changeType,
+		Timestamp: time.Now(),
+		Data:      secretData,
+	}:
+	default:
+		log.Println("Secret broadcast channel full, skipping")
 	}
 }
 
 // handleSecretSSE handles SSE connections for secrets
 func handleSecretSSE(c *fiber.Ctx) error {
+	// Check if hub is running
+	SSE_SecretHub.mu.RLock()
+	running := SSE_SecretHub.running
+	SSE_SecretHub.mu.RUnlock()
+
+	if !running {
+		return c.Status(503).SendString("SSE service shutting down")
+	}
+
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
 	c.Set("Connection", "keep-alive")
@@ -151,10 +215,10 @@ func handleSecretSSE(c *fiber.Ctx) error {
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
 		defer func() {
 			SSE_SecretHub.unregister <- client
-			defer cancel()
+			cancel()
 		}()
 
-		// Send initial connection message with named event
+		// Send initial connection message
 		initMsg := map[string]string{"status": "connected", "channel": "secret_list"}
 		data, _ := json.Marshal(initMsg)
 		fmt.Fprintf(w, "event: connected\n")
@@ -173,13 +237,10 @@ func handleSecretSSE(c *fiber.Ctx) error {
 					return
 				}
 
-				// Use named events based on change type
 				if change.Type == EventPing {
-					// Send ping as named event with minimal data
 					fmt.Fprintf(w, "event: ping\n")
 					fmt.Fprintf(w, "data: {}\n\n")
 				} else {
-					// Send actual changes with event type
 					data, err := json.Marshal(change)
 					if err != nil {
 						continue
@@ -192,7 +253,6 @@ func handleSecretSSE(c *fiber.Ctx) error {
 					return
 				}
 
-				// Update LastPing after successful write
 				client.mu.Lock()
 				client.LastPing = time.Now()
 				client.mu.Unlock()

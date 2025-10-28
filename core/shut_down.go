@@ -7,20 +7,31 @@ import (
 	"time"
 
 	"github.com/Knightshrestha/Secret-Injector/database"
+	"github.com/Knightshrestha/Secret-Injector/server/server_sse"
 	"github.com/gofiber/fiber/v2"
 )
 
 func Shutdown(db database.CustomDB, app *fiber.App) {
 	log.Println("Starting graceful shutdown...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	log.Println("Closing SSE hubs...")
+	server_sse.SSE_ProjectHub.Close()
+	server_sse.SSE_SecretHub.Close()
+	log.Println("✓ SSE hubs closed")
 
-	// Shutdown Fiber
+	time.Sleep(500 * time.Millisecond)
+
 	if app != nil {
 		log.Println("Shutting down Fiber server...")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
 		if err := app.ShutdownWithContext(ctx); err != nil {
-			log.Println("Fiber shutdown error:", err)
+			if err == context.DeadlineExceeded {
+				log.Println("⚠ Fiber shutdown timeout - forcing close")
+			} else {
+				log.Println("⚠ Fiber shutdown error:", err)
+			}
 		} else {
 			log.Println("✓ Fiber server stopped gracefully")
 		}
