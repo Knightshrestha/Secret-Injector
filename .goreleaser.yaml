@@ -38,7 +38,7 @@ release:
 changelog:
   use: github
   format: "{{.SHA}}: {{.Message}} (@{{.AuthorUsername}})"
-  sort: asc
+  # sort: asc
   filters:
     exclude:
       - '^docs:'
