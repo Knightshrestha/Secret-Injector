@@ -48,6 +48,29 @@ type DB_Struct struct {
 	Queries *generated.Queries
 }
 
+func SetupDatabase() error {
+	dbPath, err := getDBPath()
+	if err != nil {
+		return fmt.Errorf("cannot get database path: %w", err)
+	}
+
+	// Open temporary connection for setup
+	database, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return fmt.Errorf("cannot open database for setup: %w", err)
+	}
+	defer database.Close()
+
+	// Create tables
+	ctx := context.Background()
+	if _, err := database.ExecContext(ctx, ddl); err != nil {
+		return fmt.Errorf("failed to create tables: %w", err)
+	}
+
+	fmt.Println("✓ Database schema initialized")
+	return nil
+}
+
 // OpenWriteDatabase opens a single write connection with WAL mode
 func OpenWriteDatabase() (DB_Struct, error) {
 	dbPath, err := getDBPath()
@@ -86,13 +109,6 @@ func OpenWriteDatabase() (DB_Struct, error) {
 	}
 	fmt.Println("✓ WAL mode enabled:", mode)
 
-	// Create tables ONLY on write connection
-	ctx := context.Background()
-	if _, err := dbWrite.ExecContext(ctx, ddl); err != nil {
-		dbWrite.Close()
-		return DB_Struct{}, fmt.Errorf("failed to create tables: %w", err)
-	}
-
 	return DB_Struct{
 		DB:      dbWrite,
 		Queries: generated.New(dbWrite),
@@ -127,13 +143,18 @@ func OpenReadDatabase() (DB_Struct, error) {
 
 // OpenDatabase opens both read and write database connections
 func OpenDatabase() CustomDB {
-	// Open write database first (creates tables)
+	// Setup database schema first (if needed)
+	if err := SetupDatabase(); err != nil {
+		log.Fatal("Failed to setup database:", err)
+	}
+	
+	// Open write database
 	writableDatabase, err := OpenWriteDatabase()
 	if err != nil {
 		log.Fatal("Failed to open write database:", err)
 	}
 
-	// Open read database after tables are created
+	// Open read database
 	readOnlyDatabase, err := OpenReadDatabase()
 	if err != nil {
 		writableDatabase.DB.Close()
